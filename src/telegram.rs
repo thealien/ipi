@@ -5,7 +5,7 @@ use reqwest::Client;
 pub async fn handle_telegram_webhook(
     update: crate::models::TelegramUpdate,
     bot_token: String,
-    cache: IpCache, // <-- Передаем кеш
+    cache: IpCache,
 ) -> Result<(), String> {
     let message = match update.message {
         Some(msg) => msg,
@@ -18,13 +18,27 @@ pub async fn handle_telegram_webhook(
         None => return Ok(()),
     };
 
-    let ip = text.trim();
+    let trimmed_text = text.trim();
+
+    // Обработка команды /start
+    if trimmed_text.starts_with("/start") {
+        let welcome_message = "👋 Привет!\n\n\
+            Я бот-помощник для проверки информации об IP-адресах (**ipi**).\n\n\
+            Просто отправь мне любой IPv4 или IPv6 адрес (например, `8.8.8.8`), \
+            и я верну тебе подробные данные о геолокации, провайдере, типе сети и безопасности.";
+
+        send_telegram_message(&bot_token, chat_id, welcome_message).await?;
+        return Ok(());
+    }
+
+    // Обработка обычного текста как IP-адреса
+    let ip = trimmed_text;
 
     if !ip.contains('.') && !ip.contains(':') {
         send_telegram_message(
             &bot_token,
             chat_id,
-            "⚠️ Пожалуйста, отправьте валидный IP-адрес.",
+            "⚠️ Пожалуйста, отправьте валидный IP-адрес или команду /start.",
         )
         .await?;
         return Ok(());
@@ -38,7 +52,6 @@ pub async fn handle_telegram_webhook(
         println!("[Cache MISS] IP: {}", ip);
         match fetch_ip_info(ip).await {
             Ok(info) => {
-                // Сохраняем в кеш (например, со сроком жизни, либо просто по размеру)
                 cache.insert(ip.to_string(), info.clone()).await;
                 info
             }
